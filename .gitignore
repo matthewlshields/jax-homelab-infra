@@ -1,0 +1,18 @@
+# OpenTofu/Terraform
+**/.terraform/
+**/.tofu/
+**/*.tfstate
+**/*.tfstate.*
+**/tfplan
+**/crash.log
+
+# Ansible
+**/*.retry
+**/.ansible/
+ansible/inventories/**/hosts.ini
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

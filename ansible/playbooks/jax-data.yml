@@ -1,0 +1,6 @@
+---
+- name: Configure jax-data (Postgres + pgvector)
+  hosts: jax_data
+  become: true
+  roles:
+    - jax_data

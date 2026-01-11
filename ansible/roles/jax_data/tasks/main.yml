@@ -1,0 +1,4 @@
+---
+- name: Placeholder - jax-data role
+  ansible.builtin.debug:
+    msg: "jax-data role placeholder (next step: install Postgres 18 + pgvector)"

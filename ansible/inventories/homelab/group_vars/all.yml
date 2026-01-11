@@ -1,0 +1,10 @@
+---
+# Defaults; override per environment if needed
+
+postgres_version: "18"
+postgres_listen_addresses: "127.0.0.1"   # tighten later; for now local only
+postgres_port: 5432
+
+# We'll store passwords in 1Password; do not commit secrets here.
+postgres_app_db: "jax"
+postgres_app_user: "jax"

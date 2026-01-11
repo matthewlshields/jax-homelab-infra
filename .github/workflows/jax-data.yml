@@ -1,0 +1,46 @@
+name: jax-data
+
+on:
+  pull_request:
+    paths:
+      - "tofu/**"
+      - "ansible/**"
+      - "images/**"
+      - ".github/workflows/jax-data.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "tofu/**"
+      - "ansible/**"
+      - "images/**"
+      - ".github/workflows/jax-data.yml"
+
+jobs:
+  plan:
+    runs-on: [self-hosted, homelab, proxmox]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Assumes your self-hosted runner LXC has Podman installed.
+      # We'll pull AWS + Proxmox secrets from 1Password in a later step.
+      - name: OpenTofu fmt/validate/plan (toolbox container)
+        run: |
+          podman run --rm \
+            -v "$PWD:/work:Z" -w /work/tofu \
+            ghcr.io/REPLACE_ME/jax-ci-toolbox:latest \
+            bash -lc "tofu fmt -check && tofu init -upgrade && tofu validate && tofu plan -out=tfplan"
+
+  apply:
+    if: github.ref == 'refs/heads/main'
+    needs: [plan]
+    runs-on: [self-hosted, homelab, proxmox]
+    environment: homelab-apply
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OpenTofu apply (toolbox container)
+        run: |
+          podman run --rm \
+            -v "$PWD:/work:Z" -w /work/tofu \
+            ghcr.io/REPLACE_ME/jax-ci-toolbox:latest \
+            bash -lc "tofu init -upgrade && tofu apply -auto-approve"

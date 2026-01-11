@@ -1,0 +1,33 @@
+FROM debian:13-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Base tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl jq git bash unzip gnupg \
+    python3 python3-pip openssh-client \
+    awscli \
+  && rm -rf /var/lib/apt/lists/*
+
+# Ansible
+RUN pip3 install --no-cache-dir ansible
+
+# OpenTofu (install from official releases)
+# Pin version for repeatability
+ARG TOFU_VERSION=1.10.0
+RUN curl -fsSL -o /tmp/tofu.zip \
+      "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_amd64.zip" \
+  && unzip /tmp/tofu.zip -d /usr/local/bin \
+  && rm -f /tmp/tofu.zip \
+  && tofu version
+
+# 1Password CLI (optional inside container)
+# If you prefer op only on the runner host, you can remove this and pass env in.
+ARG OP_VERSION=2.27.0
+RUN curl -fsSL -o /tmp/op.zip \
+      "https://cache.agilebits.com/dist/1P/op2/pkg/v${OP_VERSION}/op_linux_amd64_v${OP_VERSION}.zip" \
+  && unzip /tmp/op.zip -d /usr/local/bin \
+  && rm -f /tmp/op.zip \
+  && op --version
+
+WORKDIR /work

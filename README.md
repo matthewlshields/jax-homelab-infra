@@ -2,6 +2,8 @@
 
 Homelab infrastructure for Jax (Proxmox + LXCs + CI/CD).
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/matthewlshields/jax-homelab-infra/badge)](https://scorecard.dev/viewer/?uri=github.com/matthewlshields/jax-homelab-infra)
+
 ## High-level
 - OpenTofu for IaC
 - Remote state: S3 + lockfile

@@ -1,0 +1,39 @@
+---
+# Default variables for jax_data role
+
+# Database configuration
+jax_db_name: jax
+jax_db_user: jax
+# jax_db_password should be set in group_vars or vault - no default for security
+
+# Vector embedding dimensions
+# 1536 = OpenAI ada-002, text-embedding-3-small
+# 3072 = OpenAI text-embedding-3-large
+# 1024 = Cohere embed-english-v3.0
+# 768  = Many open-source models (e.g., all-MiniLM-L6-v2)
+embedding_dimensions: 1536
+
+# PostgreSQL configuration
+postgres_listen_addresses: "localhost"  # Change to "*" or specific IP for remote access
+postgres_port: 5432
+postgres_max_connections: 100
+
+# Memory settings (adjust based on container memory)
+postgres_shared_buffers: "256MB"
+postgres_effective_cache_size: "768MB"
+postgres_work_mem: "16MB"
+postgres_maintenance_work_mem: "128MB"
+
+# WAL settings
+postgres_wal_buffers: "16MB"
+postgres_min_wal_size: "1GB"
+postgres_max_wal_size: "4GB"
+
+# Networking - which hosts can connect
+# Default: only localhost. Add your network CIDR for remote access.
+postgres_allowed_hosts:
+  - { type: "local", database: "all", user: "all", method: "peer" }
+  - { type: "host", database: "all", user: "all", address: "127.0.0.1/32", method: "scram-sha-256" }
+  - { type: "host", database: "all", user: "all", address: "::1/128", method: "scram-sha-256" }
+  # Uncomment and adjust for remote access from your network:
+  # - { type: "host", database: "jax", user: "jax", address: "192.168.1.0/24", method: "scram-sha-256" }

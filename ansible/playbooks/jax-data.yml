@@ -2,5 +2,44 @@
 - name: Configure jax-data (Postgres + pgvector)
   hosts: jax_data
   become: true
+  
+  vars_prompt:
+    - name: jax_db_password
+      prompt: "Enter password for jax database user (or set JAX_DB_PASSWORD env var)"
+      private: true
+      default: "{{ lookup('env', 'JAX_DB_PASSWORD') }}"
+  
+  pre_tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - jax_db_password is defined
+          - jax_db_password | length > 0
+        fail_msg: "jax_db_password must be set (via prompt, env var, or --extra-vars)"
+  
   roles:
     - jax_data
+  
+  post_tasks:
+    - name: Verify PostgreSQL is running
+      ansible.builtin.service_facts:
+      register: services_state
+
+    - name: Assert PostgreSQL service is active
+      ansible.builtin.assert:
+        that:
+          - "'postgresql.service' in services_state.ansible_facts.services"
+          - "services_state.ansible_facts.services['postgresql.service'].state == 'running'"
+        fail_msg: "PostgreSQL is not running!"
+        success_msg: "PostgreSQL is running successfully"
+
+    - name: Test database connection
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_ping:
+        db: "{{ jax_db_name }}"
+      register: db_ping
+
+    - name: Display connection test result
+      ansible.builtin.debug:
+        msg: "Database connection test: {{ 'SUCCESS' if db_ping.is_available else 'FAILED' }}"

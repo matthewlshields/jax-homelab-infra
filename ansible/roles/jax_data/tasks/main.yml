@@ -1,4 +1,218 @@
 ---
-- name: Placeholder - jax-data role
+# jax_data role - Postgres 18 + pgvector for Jax knowledge base
+#
+# This role installs and configures:
+# - PostgreSQL 18 from PGDG repository
+# - pgvector extension for vector similarity search
+# - jax database and user for the AI agent system
+
+- name: Install prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - python3-psycopg2  # Required for Ansible postgres modules
+    state: present
+    update_cache: true
+
+- name: Add PostgreSQL GPG key
+  ansible.builtin.apt_key:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    state: present
+
+- name: Add PostgreSQL APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+    filename: pgdg
+
+- name: Install PostgreSQL 18 and pgvector
+  ansible.builtin.apt:
+    name:
+      - postgresql-18
+      - postgresql-18-pgvector
+      - postgresql-client-18
+    state: present
+    update_cache: true
+
+- name: Ensure PostgreSQL data directory exists
+  ansible.builtin.file:
+    path: /var/lib/postgresql/18/main
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+
+- name: Deploy postgresql.conf
+  ansible.builtin.template:
+    src: postgresql.conf.j2
+    dest: /etc/postgresql/18/main/postgresql.conf
+    owner: postgres
+    group: postgres
+    mode: "0644"
+  notify: Restart PostgreSQL
+
+- name: Deploy pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: /etc/postgresql/18/main/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: Reload PostgreSQL
+
+- name: Ensure PostgreSQL is started and enabled
+  ansible.builtin.systemd:
+    name: postgresql
+    state: started
+    enabled: true
+
+- name: Create jax database user
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ jax_db_user }}"
+    password: "{{ jax_db_password }}"
+    role_attr_flags: CREATEDB,LOGIN
+    state: present
+
+- name: Create jax database
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ jax_db_name }}"
+    owner: "{{ jax_db_user }}"
+    encoding: UTF8
+    lc_collate: en_US.UTF-8
+    lc_ctype: en_US.UTF-8
+    template: template0
+    state: present
+
+- name: Enable pgvector extension
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_ext:
+    name: vector
+    db: "{{ jax_db_name }}"
+    state: present
+
+- name: Grant schema permissions to jax user
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_privs:
+    database: "{{ jax_db_name }}"
+    privs: ALL
+    type: schema
+    objs: public
+    role: "{{ jax_db_user }}"
+    state: present
+
+- name: Create embeddings table for RAG/knowledge base
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ jax_db_name }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS embeddings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        content TEXT NOT NULL,
+        metadata JSONB DEFAULT '{}',
+        embedding vector({{ embedding_dimensions }}),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      
+      -- Create index for vector similarity search (IVFFlat for speed)
+      CREATE INDEX IF NOT EXISTS embeddings_embedding_idx 
+        ON embeddings 
+        USING ivfflat (embedding vector_cosine_ops)
+        WITH (lists = 100);
+      
+      -- Create index for metadata queries
+      CREATE INDEX IF NOT EXISTS embeddings_metadata_idx 
+        ON embeddings 
+        USING gin (metadata);
+      
+      -- Grant permissions
+      GRANT ALL ON embeddings TO {{ jax_db_user }};
+
+- name: Create conversations table for memory
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ jax_db_name }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS conversations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID NOT NULL,
+        role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
+        content TEXT NOT NULL,
+        metadata JSONB DEFAULT '{}',
+        embedding vector({{ embedding_dimensions }}),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      
+      -- Index for session lookups
+      CREATE INDEX IF NOT EXISTS conversations_session_idx 
+        ON conversations (session_id, created_at);
+      
+      -- Index for semantic search over conversations
+      CREATE INDEX IF NOT EXISTS conversations_embedding_idx 
+        ON conversations 
+        USING ivfflat (embedding vector_cosine_ops)
+        WITH (lists = 100);
+      
+      -- Grant permissions
+      GRANT ALL ON conversations TO {{ jax_db_user }};
+
+- name: Create tasks table for GTD/todo tracking
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: "{{ jax_db_name }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS tasks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        description TEXT,
+        status VARCHAR(20) DEFAULT 'inbox' CHECK (status IN ('inbox', 'next', 'waiting', 'someday', 'done', 'archived')),
+        context VARCHAR(50),  -- GTD context (e.g., @home, @work, @computer)
+        project_id UUID,
+        due_date DATE,
+        priority INTEGER DEFAULT 0,
+        metadata JSONB DEFAULT '{}',
+        embedding vector({{ embedding_dimensions }}),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      );
+      
+      -- Indexes for common queries
+      CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks (status);
+      CREATE INDEX IF NOT EXISTS tasks_context_idx ON tasks (context);
+      CREATE INDEX IF NOT EXISTS tasks_project_idx ON tasks (project_id);
+      CREATE INDEX IF NOT EXISTS tasks_due_date_idx ON tasks (due_date);
+      
+      -- Semantic search over tasks
+      CREATE INDEX IF NOT EXISTS tasks_embedding_idx 
+        ON tasks 
+        USING ivfflat (embedding vector_cosine_ops)
+        WITH (lists = 100);
+      
+      -- Grant permissions
+      GRANT ALL ON tasks TO {{ jax_db_user }};
+
+- name: Print connection info
   ansible.builtin.debug:
-    msg: "jax-data role placeholder (next step: install Postgres 18 + pgvector)"
+    msg: |
+      Jax database configured successfully!
+      
+      Connection string: postgresql://{{ jax_db_user }}:****@{{ ansible_host }}:5432/{{ jax_db_name }}
+      
+      Tables created:
+        - embeddings: General RAG/knowledge base storage
+        - conversations: Chat memory with semantic search
+        - tasks: GTD-style task management
+      
+      pgvector is enabled with {{ embedding_dimensions }}-dimensional vectors.

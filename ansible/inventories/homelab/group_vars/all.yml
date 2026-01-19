@@ -1,10 +1,33 @@
 ---
 # Defaults; override per environment if needed
+ansible_user: root
+ansible_python_interpreter: /usr/bin/python3
 
+# PostgreSQL configuration
 postgres_version: "18"
-postgres_listen_addresses: "127.0.0.1"   # tighten later; for now local only
+postgres_listen_addresses: "*"  # Allow remote connections
 postgres_port: 5432
 
-# We'll store passwords in 1Password; do not commit secrets here.
-postgres_app_db: "jax"
-postgres_app_user: "jax"
+# jax-data database credentials
+# NOTE: Set jax_db_password via 1Password CLI or --extra-vars (never commit secrets)
+jax_db_name: "jax"
+jax_db_user: "jax"
+# jax_db_password: Set via op CLI or --extra-vars
+
+# Legacy variable names (for compatibility)
+postgres_app_db: "{{ jax_db_name }}"
+postgres_app_user: "{{ jax_db_user }}"
+
+# Embedding dimensions for pgvector
+# 1536 = OpenAI ada-002, text-embedding-3-small
+# 3072 = OpenAI text-embedding-3-large
+# 1024 = Cohere embed-english-v3.0
+# 768  = Many open-source models
+embedding_dimensions: 1536
+
+# PostgreSQL network access - allow from homelab network
+postgres_allowed_hosts:
+  - { type: "local", database: "all", user: "all", method: "peer" }
+  - { type: "host", database: "all", user: "all", address: "127.0.0.1/32", method: "scram-sha-256" }
+  - { type: "host", database: "all", user: "all", address: "::1/128", method: "scram-sha-256" }
+  - { type: "host", database: "jax", user: "jax", address: "192.168.1.0/24", method: "scram-sha-256" }

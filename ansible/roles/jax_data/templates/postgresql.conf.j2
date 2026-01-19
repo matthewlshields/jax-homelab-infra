@@ -1,0 +1,109 @@
+# PostgreSQL 18 Configuration for Jax
+# Managed by Ansible - Do not edit manually
+# {{ ansible_managed }}
+
+#------------------------------------------------------------------------------
+# CONNECTIONS AND AUTHENTICATION
+#------------------------------------------------------------------------------
+
+listen_addresses = '{{ postgres_listen_addresses }}'
+port = {{ postgres_port }}
+max_connections = {{ postgres_max_connections }}
+
+#------------------------------------------------------------------------------
+# RESOURCE USAGE (except WAL)
+#------------------------------------------------------------------------------
+
+# Memory
+shared_buffers = {{ postgres_shared_buffers }}
+effective_cache_size = {{ postgres_effective_cache_size }}
+work_mem = {{ postgres_work_mem }}
+maintenance_work_mem = {{ postgres_maintenance_work_mem }}
+
+# Disk
+dynamic_shared_memory_type = posix
+
+#------------------------------------------------------------------------------
+# WRITE-AHEAD LOG
+#------------------------------------------------------------------------------
+
+wal_buffers = {{ postgres_wal_buffers }}
+min_wal_size = {{ postgres_min_wal_size }}
+max_wal_size = {{ postgres_max_wal_size }}
+
+#------------------------------------------------------------------------------
+# QUERY TUNING
+#------------------------------------------------------------------------------
+
+# Planner cost constants
+random_page_cost = 1.1          # Assuming SSD storage
+effective_io_concurrency = 200  # For SSDs
+
+# Parallel query settings
+max_parallel_workers_per_gather = 2
+max_parallel_workers = 4
+max_parallel_maintenance_workers = 2
+
+#------------------------------------------------------------------------------
+# REPORTING AND LOGGING
+#------------------------------------------------------------------------------
+
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_rotation_age = 1d
+log_rotation_size = 100MB
+log_line_prefix = '%m [%p] %q%u@%d '
+log_timezone = 'UTC'
+
+# What to log
+log_min_duration_statement = 1000  # Log queries taking > 1 second
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_lock_waits = on
+log_temp_files = 0
+
+#------------------------------------------------------------------------------
+# LOCALE AND FORMATTING
+#------------------------------------------------------------------------------
+
+datestyle = 'iso, mdy'
+timezone = 'UTC'
+lc_messages = 'en_US.UTF-8'
+lc_monetary = 'en_US.UTF-8'
+lc_numeric = 'en_US.UTF-8'
+lc_time = 'en_US.UTF-8'
+default_text_search_config = 'pg_catalog.english'
+
+#------------------------------------------------------------------------------
+# PGVECTOR SETTINGS
+#------------------------------------------------------------------------------
+
+# Increase for better vector index build performance
+# maintenance_work_mem is already set above
+
+# IVFFlat index settings (used during index creation)
+# The lists parameter is set in CREATE INDEX, not here
+
+#------------------------------------------------------------------------------
+# CONFIG FILE INCLUDES
+#------------------------------------------------------------------------------
+
+include_dir = 'conf.d'
+
+#------------------------------------------------------------------------------
+# DATA DIRECTORY
+#------------------------------------------------------------------------------
+
+data_directory = '/var/lib/postgresql/18/main'
+hba_file = '/etc/postgresql/18/main/pg_hba.conf'
+ident_file = '/etc/postgresql/18/main/pg_ident.conf'
+external_pid_file = '/var/run/postgresql/18-main.pid'
+
+#------------------------------------------------------------------------------
+# UNIX SOCKET
+#------------------------------------------------------------------------------
+
+unix_socket_directories = '/var/run/postgresql'
